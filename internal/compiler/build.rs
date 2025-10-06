@@ -5,6 +5,7 @@ use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 
 fn main() -> std::io::Result<()> {
+    println!("cargo:rustc-cfg=slint_debug_property"); // DF HACK
     println!("cargo:rustc-check-cfg=cfg(slint_debug_property)");
 
     let cargo_manifest_dir = PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap());
