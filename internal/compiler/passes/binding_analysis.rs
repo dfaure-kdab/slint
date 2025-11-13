@@ -316,6 +316,20 @@ fn analyze_binding(
 
     if context.currently_analyzing.contains(current) {
         let mut loop_description = String::new();
+
+        fn push_to_loop_description(current: &PropertyPath, loop_description: &mut String) {
+            match current.prop.element().borrow().id.as_str() {
+                "" => loop_description.push_str(current.prop.name()),
+                id => {
+                    loop_description.push_str(id);
+                    loop_description.push_str(".");
+                    loop_description.push_str(current.prop.name());
+                }
+            }
+        }
+
+        push_to_loop_description(current, &mut loop_description);
+
         let mut has_window_layout = false;
         for it in context.currently_analyzing.iter().rev() {
             if context.window_layout_property.as_ref().is_some_and(|p| p == it) {
