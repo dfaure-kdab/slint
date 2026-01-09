@@ -4,6 +4,10 @@
 [alias]
 xtask = "run --locked --package xtask --"
 
+# Added by David Faure to be able to debug into i-slint-compiler
+[build]
+rustflags = ["-Cdebuginfo=2", "-Csplit-debuginfo=off"]
+
 [target.xtensa-esp32s3-none-elf]
 rustflags = [
   "-C",

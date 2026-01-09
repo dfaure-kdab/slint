@@ -76,6 +76,11 @@ members = [
   'tools/tr-extractor',
   "ui-libraries/material/examples/gallery",
   'xtask',
+  'videofinder',
+  'row-col-property',
+  'gridlayout-feature',
+  'flowlayout-feature',
+  'vlayout-comparison',
 ]
 
 default-members = [
@@ -101,9 +106,12 @@ default-members = [
   'tests/driver/rust',
   'tests/screenshots',
   'tools/compiler',
-  'tools/figma_import',
-  'tools/lsp',
   'tools/viewer',
+  'videofinder',
+  'row-col-property',
+  'gridlayout-feature',
+  'flowlayout-feature',
+  'vlayout-comparison',
 ]
 
 resolver = "3"
