@@ -148,7 +148,7 @@ impl LocalMemberIndex {
 }
 
 /// A reference to a property, callback, or function, in the context of a SubComponent
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(Clone, Hash, PartialEq, Eq)]
 pub enum MemberReference {
     /// The property or callback is withing a global
     Global { global_index: GlobalIdx, member: LocalMemberIndex },
@@ -184,6 +184,19 @@ impl MemberReference {
                     ..
                 }
         )
+    }
+}
+
+impl std::fmt::Debug for MemberReference {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MemberReference::Global { global_index, member } => {
+                write!(f, "Global {{ global_index: {global_index:?}, member: {member:?} }}")
+            }
+            MemberReference::Relative { parent_level, local_reference } => {
+                write!(f, "Relative {{ parent_level: {parent_level}, {local_reference:?} }}")
+            }
+        }
     }
 }
 
