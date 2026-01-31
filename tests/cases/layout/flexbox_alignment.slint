@@ -1,0 +1,39 @@
+// Copyright © Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author David Faure <david.faure@kdab.com>
+// SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-Slint-Royalty-free-2.0 OR LicenseRef-Slint-Software-3.0
+
+// Test FlexBoxLayout vertical alignment of items within rows
+
+export component TestCase inherits Window {
+    width: 200px;
+    height: 300px;
+
+    // Test center alignment
+    FlexBoxLayout {
+        spacing: 5px;
+        alignment: center;
+        width: 200px;
+        height: 150px;
+
+        c1 := Rectangle { width: 50px; height: 20px; background: red; }
+        c2 := Rectangle { width: 50px; height: 40px; background: green; }
+        c3 := Rectangle { width: 50px; height: 30px; background: blue; }
+    }
+
+    // Center alignment: row height = max(20, 40, 30) = 40
+    // c1: y = (40 - 20) / 2 = 10
+    // c2: y = (40 - 40) / 2 = 0 (tallest)
+    // c3: y = (40 - 30) / 2 = 5
+    out property <bool> test: c1.y == 10px && c2.y == 0px && c3.y == 5px;
+}
+
+/*
+```cpp
+auto handle = TestCase::create();
+assert(handle->get_test());
+```
+
+```rust
+let instance = TestCase::new().unwrap();
+assert!(instance.get_test());
+```
+*/
