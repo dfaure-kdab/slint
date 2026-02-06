@@ -8,6 +8,12 @@ xtask = "run --locked --package xtask --"
 [build]
 rustflags = ["-Cdebuginfo=2", "-Csplit-debuginfo=off"]
 
+[env]
+SLINT_NO_QT = "1"
+# If I want to test Qt again, then this will be useful
+# because it picks up the Qt in /lib64, so my own plugin path isn't wanted
+QT_PLUGIN_PATH = ""
+
 [target.xtensa-esp32s3-none-elf]
 rustflags = [
   "-C",
