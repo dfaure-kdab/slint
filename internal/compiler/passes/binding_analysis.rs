@@ -539,6 +539,30 @@ fn recurse_expression(
         Expression::SolveFlexBoxLayout(layout)
         | Expression::ComputeFlexBoxLayoutInfo(layout, _) => {
             use crate::layout::FlexDirection;
+            // Visit direction dependency if it's a property reference
+            if let Some(nr) = layout.direction.as_ref() {
+                vis(&nr.clone().into(), P);
+            }
+            // Try to determine direction at compile time from constant binding
+            let direction = layout
+                .direction
+                .as_ref()
+                .and_then(|nr| {
+                    nr.element().borrow().bindings.get(nr.name()).and_then(|binding| match &binding
+                        .borrow()
+                        .expression
+                    {
+                        crate::expression_tree::Expression::EnumerationValue(ev) => {
+                            if ev.value == 0 {
+                                Some(FlexDirection::Row)
+                            } else {
+                                Some(FlexDirection::Column)
+                            }
+                        }
+                        _ => None,
+                    })
+                })
+                .unwrap_or(FlexDirection::Row); // Default to Row
             // Visit all layout geometry dependencies
             if matches!(expr, Expression::SolveFlexBoxLayout(..)) {
                 // FlexBoxLayout needs both width and height
@@ -550,7 +574,7 @@ fn recurse_expression(
                 }
             } else if let Expression::ComputeFlexBoxLayoutInfo(_, orientation) = expr {
                 // Check if this orientation needs container dimension for wrapping
-                let needs_container_dim = match (layout.direction, orientation) {
+                let needs_container_dim = match (direction, orientation) {
                     (FlexDirection::Row, Orientation::Vertical) => {
                         // Row direction: vertical info needs width
                         if let Some(nr) = layout.geometry.rect.width_reference.as_ref() {

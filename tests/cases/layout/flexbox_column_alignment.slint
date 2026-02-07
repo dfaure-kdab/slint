@@ -1,0 +1,39 @@
+// Copyright © Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author David Faure <david.faure@kdab.com>
+// SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-Slint-Royalty-free-2.0 OR LicenseRef-Slint-Software-3.0
+
+// Test FlexBoxLayout column direction with horizontal alignment
+
+export component TestCase inherits Window {
+    width: 300px;
+    height: 200px;
+
+    // Test center alignment in column direction
+    FlexBoxLayout {
+        flex-direction: column;
+        spacing: 5px;
+        alignment: center;
+        height: 200px;
+
+        c1 := Rectangle { width: 40px; height: 40px; background: red; }
+        c2 := Rectangle { width: 60px; height: 40px; background: green; }
+        c3 := Rectangle { width: 50px; height: 40px; background: blue; }
+    }
+
+    // Center alignment: column width = max(40, 60, 50) = 60
+    // c1: x = (60 - 40) / 2 = 10 (centered within column width)
+    // c2: x = (60 - 60) / 2 = 0 (widest)
+    // c3: x = (60 - 50) / 2 = 5
+    out property <bool> test: c1.x == 10px && c2.x == 0px && c3.x == 5px;
+}
+
+/*
+```cpp
+auto handle = TestCase::create();
+assert(handle->get_test());
+```
+
+```rust
+let instance = TestCase::new().unwrap();
+assert!(instance.get_test());
+```
+*/

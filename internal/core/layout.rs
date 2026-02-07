@@ -5,7 +5,7 @@
 
 // cspell:ignore coord
 
-use crate::items::{DialogButtonRole, LayoutAlignment};
+use crate::items::{DialogButtonRole, FlexDirection, LayoutAlignment};
 use crate::{Coord, SharedVector, slice::Slice};
 use alloc::format;
 use alloc::string::String;
@@ -1012,13 +1012,14 @@ pub struct BoxLayoutData<'a> {
 
 #[repr(C)]
 #[derive(Debug)]
-/// The FlexBoxLayoutData is used for a horizontal flow layout with wrapping.
+/// The FlexBoxLayoutData is used for a flex layout with wrapping.
 pub struct FlexBoxLayoutData<'a> {
     pub width: Coord,
     pub height: Coord,
     pub spacing: Coord,
     pub padding: Padding,
     pub alignment: LayoutAlignment,
+    pub direction: FlexDirection,
     /// Horizontal constraints (width) for each cell
     pub cells_h: Slice<'a, LayoutItemInfo>,
     /// Vertical constraints (height) for each cell
@@ -1161,14 +1162,202 @@ pub fn box_layout_info_ortho(cells: Slice<LayoutItemInfo>, padding: &Padding) ->
     fold
 }
 
+/// Helper module for taffy-based flexbox layout
+mod flexbox_taffy {
+    use super::{Coord, LayoutAlignment, LayoutItemInfo, Padding, Slice};
+    use alloc::vec::Vec;
+    pub use taffy::prelude::FlexDirection as TaffyFlexDirection;
+    use taffy::prelude::{
+        AlignContent, AlignItems, AvailableSpace, Dimension, Display, FlexWrap, LengthPercentage,
+        NodeId, Rect, Size, Style, TaffyTree,
+    };
+
+    /// Build a taffy tree from Slint layout constraints
+    pub struct FlexboxTaffyBuilder {
+        pub taffy: TaffyTree<()>,
+        pub children: Vec<NodeId>,
+        pub container: NodeId,
+    }
+
+    impl FlexboxTaffyBuilder {
+        /// Create a new flexbox layout tree from item constraints
+        pub fn new(
+            cells_h: &Slice<LayoutItemInfo>,
+            cells_v: &Slice<LayoutItemInfo>,
+            spacing: Coord,
+            padding: &Padding,
+            alignment: LayoutAlignment,
+            flex_direction: TaffyFlexDirection,
+            container_width: Option<Coord>,
+            container_height: Option<Coord>,
+        ) -> Self {
+            let mut taffy = TaffyTree::<()>::new();
+
+            // Create child nodes from Slint constraints
+            let children: Vec<NodeId> = cells_h
+                .iter()
+                .enumerate()
+                .map(|(idx, cell_h)| {
+                    let cell_v = cells_v.get(idx);
+                    let h_constraint = &cell_h.constraint;
+                    let v_constraint = cell_v.map(|c| &c.constraint);
+
+                    // Use preferred_bounded() which clamps preferred to min/max bounds
+                    let preferred_width = h_constraint.preferred_bounded();
+                    let preferred_height =
+                        v_constraint.map(|vc| vc.preferred_bounded()).unwrap_or(0.0);
+
+                    // flex_basis depends on direction
+                    let flex_basis = match flex_direction {
+                        TaffyFlexDirection::Row | TaffyFlexDirection::RowReverse => {
+                            Dimension::Length(preferred_width)
+                        }
+                        TaffyFlexDirection::Column | TaffyFlexDirection::ColumnReverse => {
+                            Dimension::Length(preferred_height)
+                        }
+                    };
+
+                    taffy
+                        .new_leaf(Style {
+                            flex_basis,
+                            size: Size {
+                                width: match flex_direction {
+                                    TaffyFlexDirection::Column
+                                    | TaffyFlexDirection::ColumnReverse => {
+                                        if preferred_width > 0.0 {
+                                            Dimension::Length(preferred_width)
+                                        } else {
+                                            Dimension::Auto
+                                        }
+                                    }
+                                    _ => Dimension::Auto,
+                                },
+                                height: match flex_direction {
+                                    TaffyFlexDirection::Row | TaffyFlexDirection::RowReverse => {
+                                        if preferred_height > 0.0 {
+                                            Dimension::Length(preferred_height)
+                                        } else {
+                                            Dimension::Auto
+                                        }
+                                    }
+                                    _ => Dimension::Auto,
+                                },
+                            },
+                            min_size: Size {
+                                width: Dimension::Length(h_constraint.min),
+                                height: Dimension::Length(
+                                    v_constraint.map(|vc| vc.min).unwrap_or(0.0),
+                                ),
+                            },
+                            max_size: Size {
+                                width: if h_constraint.max < Coord::MAX {
+                                    Dimension::Length(h_constraint.max)
+                                } else {
+                                    Dimension::Auto
+                                },
+                                height: if let Some(vc) = v_constraint {
+                                    if vc.max < Coord::MAX {
+                                        Dimension::Length(vc.max)
+                                    } else {
+                                        Dimension::Auto
+                                    }
+                                } else {
+                                    Dimension::Auto
+                                },
+                            },
+                            flex_grow: 0.0,
+                            flex_shrink: 0.0,
+                            ..Default::default()
+                        })
+                        .unwrap()
+                })
+                .collect();
+
+            // Create container node
+            let container = taffy
+                .new_with_children(
+                    Style {
+                        display: Display::Flex,
+                        flex_direction,
+                        flex_wrap: FlexWrap::Wrap,
+                        align_items: Some(match alignment {
+                            LayoutAlignment::Start => AlignItems::FlexStart,
+                            LayoutAlignment::End => AlignItems::FlexEnd,
+                            LayoutAlignment::Center => AlignItems::Center,
+                            LayoutAlignment::Stretch => AlignItems::Stretch,
+                            _ => AlignItems::FlexStart,
+                        }),
+                        align_content: Some(AlignContent::FlexStart),
+                        gap: Size {
+                            width: LengthPercentage::Length(spacing),
+                            height: LengthPercentage::Length(spacing),
+                        },
+                        // For FlexBoxLayout, padding is uniform on all 4 sides
+                        // The Padding struct has begin/end which should be equal for uniform padding
+                        padding: Rect {
+                            left: LengthPercentage::Length(padding.begin),
+                            right: LengthPercentage::Length(padding.end),
+                            top: LengthPercentage::Length(padding.begin),
+                            bottom: LengthPercentage::Length(padding.end),
+                        },
+                        size: Size {
+                            width: container_width
+                                .map(Dimension::Length)
+                                .unwrap_or(Dimension::Auto),
+                            height: container_height
+                                .map(Dimension::Length)
+                                .unwrap_or(Dimension::Auto),
+                        },
+                        ..Default::default()
+                    },
+                    &children,
+                )
+                .unwrap();
+
+            Self { taffy, children, container }
+        }
+
+        /// Compute the layout with the given available space
+        pub fn compute_layout(&mut self, available_width: Coord, available_height: Coord) {
+            self.taffy
+                .compute_layout(
+                    self.container,
+                    taffy::prelude::Size {
+                        width: if available_width < Coord::MAX {
+                            AvailableSpace::Definite(available_width)
+                        } else {
+                            AvailableSpace::MaxContent
+                        },
+                        height: if available_height < Coord::MAX {
+                            AvailableSpace::Definite(available_height)
+                        } else {
+                            AvailableSpace::MaxContent
+                        },
+                    },
+                )
+                .unwrap();
+        }
+
+        /// Get the computed container size
+        pub fn container_size(&self) -> (Coord, Coord) {
+            let layout = self.taffy.layout(self.container).unwrap();
+            (layout.size.width, layout.size.height)
+        }
+
+        /// Get the layout for a specific child
+        pub fn child_layout(&self, idx: usize) -> (Coord, Coord, Coord, Coord) {
+            let layout = self.taffy.layout(self.children[idx]).unwrap();
+            (layout.location.x, layout.location.y, layout.size.width, layout.size.height)
+        }
+    }
+}
+
 /// Solve a FlexBoxLayout using Taffy
 /// Returns: [x1, y1, w1, h1, x2, y2, w2, h2, ...] for each item
 pub fn solve_flexbox_layout(
     data: &FlexBoxLayoutData,
     repeater_indices: Slice<u32>,
 ) -> SharedVector<Coord> {
-    use taffy::prelude::*;
-
     // 4 values per item: x, y, width, height
     let mut result = SharedVector::<Coord>::default();
     result.resize(data.cells_h.len() * 4 + repeater_indices.len() * 2, 0 as _);
@@ -1177,114 +1366,43 @@ pub fn solve_flexbox_layout(
         return result;
     }
 
-    let mut taffy = TaffyTree::<()>::new();
+    let taffy_direction = match data.direction {
+        FlexDirection::Row => flexbox_taffy::TaffyFlexDirection::Row,
+        FlexDirection::Column => flexbox_taffy::TaffyFlexDirection::Column,
+    };
 
-    // Create child nodes from Slint constraints
-    let children: Vec<NodeId> = data
-        .cells_h
-        .iter()
-        .enumerate()
-        .map(|(idx, cell_h)| {
-            let cell_v = data.cells_v.get(idx);
-            let h_constraint = &cell_h.constraint;
-            let v_constraint = cell_v.map(|c| &c.constraint);
+    let (container_width, container_height) = match data.direction {
+        FlexDirection::Row => (Some(data.width), None),
+        FlexDirection::Column => (None, Some(data.height)),
+    };
 
-            // Use preferred_bounded() which clamps preferred to min/max bounds
-            let preferred_width = h_constraint.preferred_bounded();
-            let preferred_height = v_constraint.map(|vc| vc.preferred_bounded()).unwrap_or(0.0);
+    let mut builder = flexbox_taffy::FlexboxTaffyBuilder::new(
+        &data.cells_h,
+        &data.cells_v,
+        data.spacing,
+        &data.padding,
+        data.alignment,
+        taffy_direction,
+        container_width,
+        container_height,
+    );
 
-            taffy
-                .new_leaf(Style {
-                    // Use flex_basis for the initial size, which respects min/max during layout
-                    flex_basis: Dimension::Length(preferred_width),
-                    size: Size {
-                        width: Dimension::Auto,
-                        height: if preferred_height > 0.0 {
-                            Dimension::Length(preferred_height)
-                        } else {
-                            Dimension::Auto
-                        },
-                    },
-                    min_size: Size {
-                        width: Dimension::Length(h_constraint.min),
-                        height: Dimension::Length(v_constraint.map(|vc| vc.min).unwrap_or(0.0)),
-                    },
-                    max_size: Size {
-                        width: if h_constraint.max < Coord::MAX {
-                            Dimension::Length(h_constraint.max)
-                        } else {
-                            Dimension::Auto
-                        },
-                        height: if let Some(vc) = v_constraint {
-                            if vc.max < Coord::MAX {
-                                Dimension::Length(vc.max)
-                            } else {
-                                Dimension::Auto
-                            }
-                        } else {
-                            Dimension::Auto
-                        },
-                    },
-                    flex_grow: 0.0,   // FlexBoxLayout items don't stretch horizontally
-                    flex_shrink: 0.0, // Don't shrink below preferred size
-                    ..Default::default()
-                })
-                .unwrap()
-        })
-        .collect();
+    let (available_width, available_height) = match data.direction {
+        FlexDirection::Row => (data.width, Coord::MAX),
+        FlexDirection::Column => (Coord::MAX, data.height),
+    };
 
-    // Create container node
-    let container = taffy
-        .new_with_children(
-            Style {
-                display: Display::Flex,
-                flex_direction: FlexDirection::Row,
-                flex_wrap: FlexWrap::Wrap,
-                align_items: Some(match data.alignment {
-                    LayoutAlignment::Start => AlignItems::FlexStart,
-                    LayoutAlignment::End => AlignItems::FlexEnd,
-                    LayoutAlignment::Center => AlignItems::Center,
-                    LayoutAlignment::Stretch => AlignItems::Stretch,
-                    _ => AlignItems::FlexStart,
-                }),
-                align_content: Some(AlignContent::FlexStart),
-                gap: Size {
-                    width: LengthPercentage::Length(data.spacing),
-                    height: LengthPercentage::Length(data.spacing),
-                },
-                padding: Rect {
-                    left: LengthPercentage::Length(data.padding.begin),
-                    right: LengthPercentage::Length(data.padding.end),
-                    top: LengthPercentage::Length(data.padding.begin),
-                    bottom: LengthPercentage::Length(data.padding.end),
-                },
-                size: Size { width: Dimension::Length(data.width), height: Dimension::Auto },
-                ..Default::default()
-            },
-            &children,
-        )
-        .unwrap();
-
-    // Compute layout with the available size
-    taffy
-        .compute_layout(
-            container,
-            Size {
-                width: AvailableSpace::Definite(data.width),
-                height: AvailableSpace::MaxContent,
-            },
-        )
-        .unwrap();
+    builder.compute_layout(available_width, available_height);
 
     // Extract results
     let result_slice = result.make_mut_slice();
-    for (idx, child) in children.iter().enumerate() {
-        let layout = taffy.layout(*child).unwrap();
+    for idx in 0..data.cells_h.len() {
+        let (x, y, w, h) = builder.child_layout(idx);
         let base = idx * 4;
-        result_slice[base] = layout.location.x;
-        result_slice[base + 1] = layout.location.y;
-        result_slice[base + 2] = layout.size.width;
-        result_slice[base + 3] = layout.size.height;
+        result_slice[base] = x;
+        result_slice[base + 1] = y;
+        result_slice[base + 2] = w;
+        result_slice[base + 3] = h;
     }
 
     result
@@ -1361,47 +1479,20 @@ pub fn flexbox_layout_info_with_width(
         return LayoutInfo { min: pad, preferred: pad, ..Default::default() };
     }
 
-    let available_width = width - padding.begin - padding.end;
+    // Use taffy to compute the layout and get the resulting height
+    let mut builder = flexbox_taffy::FlexboxTaffyBuilder::new(
+        &cells_h,
+        &cells_v,
+        spacing,
+        padding,
+        LayoutAlignment::Start,
+        flexbox_taffy::TaffyFlexDirection::Row,
+        Some(width),
+        None,
+    );
 
-    // Simulate the row-wrapping algorithm to calculate total height
-    let mut total_height: Coord = padding.begin + padding.end;
-    let mut current_row_width: Coord = 0.0;
-    let mut current_row_height: Coord = 0.0;
-    let mut row_count = 0;
-
-    for (idx, cell_h) in cells_h.iter().enumerate() {
-        let item_width = cell_h.constraint.preferred_bounded();
-        let item_height = cells_v.get(idx).map_or(0.0, |c| c.constraint.preferred_bounded());
-
-        // Check if this item fits on the current row
-        let width_with_item = if current_row_width > 0.0 {
-            current_row_width + spacing + item_width
-        } else {
-            item_width
-        };
-
-        if width_with_item > available_width && current_row_width > 0.0 {
-            // Complete current row and start a new one
-            total_height += current_row_height;
-            if row_count > 0 {
-                total_height += spacing;
-            }
-            row_count += 1;
-            current_row_width = item_width;
-            current_row_height = item_height;
-        } else {
-            current_row_width = width_with_item;
-            current_row_height = current_row_height.max(item_height);
-        }
-    }
-
-    // Add the last row
-    if current_row_width > 0.0 {
-        if row_count > 0 {
-            total_height += spacing;
-        }
-        total_height += current_row_height;
-    }
+    builder.compute_layout(width, Coord::MAX);
+    let (_, total_height) = builder.container_size();
 
     // Min height is the minimum of any single item
     let min_height = cells_v.iter().map(|c| c.constraint.min).fold(0.0 as Coord, |a, b| a.max(b))
@@ -1433,47 +1524,20 @@ pub fn flexbox_layout_info_with_height(
         return LayoutInfo { min: pad, preferred: pad, ..Default::default() };
     }
 
-    let available_height = height - padding.begin - padding.end;
+    // Use taffy to compute the layout with column direction and get the resulting width
+    let mut builder = flexbox_taffy::FlexboxTaffyBuilder::new(
+        &cells_h,
+        &cells_v,
+        spacing,
+        padding,
+        LayoutAlignment::Start,
+        flexbox_taffy::TaffyFlexDirection::Column,
+        None,
+        Some(height),
+    );
 
-    // Simulate the column-wrapping algorithm to calculate total width
-    let mut total_width: Coord = padding.begin + padding.end;
-    let mut current_col_height: Coord = 0.0;
-    let mut current_col_width: Coord = 0.0;
-    let mut col_count = 0;
-
-    for (idx, cell_v) in cells_v.iter().enumerate() {
-        let item_height = cell_v.constraint.preferred_bounded();
-        let item_width = cells_h.get(idx).map_or(0.0, |c| c.constraint.preferred_bounded());
-
-        // Check if this item fits in the current column
-        let height_with_item = if current_col_height > 0.0 {
-            current_col_height + spacing + item_height
-        } else {
-            item_height
-        };
-
-        if height_with_item > available_height && current_col_height > 0.0 {
-            // Complete current column and start a new one
-            total_width += current_col_width;
-            if col_count > 0 {
-                total_width += spacing;
-            }
-            col_count += 1;
-            current_col_height = item_height;
-            current_col_width = item_width;
-        } else {
-            current_col_height = height_with_item;
-            current_col_width = current_col_width.max(item_width);
-        }
-    }
-
-    // Add the last column
-    if current_col_height > 0.0 {
-        if col_count > 0 {
-            total_width += spacing;
-        }
-        total_width += current_col_width;
-    }
+    builder.compute_layout(Coord::MAX, height);
+    let (total_width, _) = builder.container_size();
 
     // Min width is the minimum of any single item
     let min_width = cells_h.iter().map(|c| c.constraint.min).fold(0.0 as Coord, |a, b| a.max(b))
