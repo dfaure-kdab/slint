@@ -248,23 +248,31 @@ pub(crate) fn compute_flexbox_layout_info(
         .and_then(|nr| {
             let value = eval::load_property(component, &nr.element(), nr.name()).ok()?;
             let direction_int: i32 = value.try_into().ok()?;
-            if direction_int == 0 { Some(FlexDirection::Row) } else { Some(FlexDirection::Column) }
+            match direction_int {
+                0 => Some(FlexDirection::Row),
+                1 => Some(FlexDirection::RowReverse),
+                2 => Some(FlexDirection::Column),
+                3 => Some(FlexDirection::ColumnReverse),
+                _ => None,
+            }
         })
         .unwrap_or(FlexDirection::Row);
 
     // Determine if we're on the main axis or cross axis
-    let is_main_axis = match (direction, orientation) {
-        (FlexDirection::Row, Orientation::Horizontal) => true,
-        (FlexDirection::Column, Orientation::Vertical) => true,
-        _ => false,
-    };
+    let is_main_axis = matches!(
+        (direction, orientation),
+        (FlexDirection::Row | FlexDirection::RowReverse, Orientation::Horizontal)
+            | (FlexDirection::Column | FlexDirection::ColumnReverse, Orientation::Vertical)
+    );
 
     let (padding, spacing) = padding_and_spacing(&flexbox_layout.geometry, orientation, &expr_eval);
 
     // Convert compiler FlexDirection to runtime FlexDirection
     let runtime_direction = match direction {
         FlexDirection::Row => CoreFlexDirection::Row,
+        FlexDirection::RowReverse => CoreFlexDirection::RowReverse,
         FlexDirection::Column => CoreFlexDirection::Column,
+        FlexDirection::ColumnReverse => CoreFlexDirection::ColumnReverse,
     };
 
     if is_main_axis {

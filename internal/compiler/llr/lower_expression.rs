@@ -916,8 +916,12 @@ fn solve_flexbox_layout(
 
     // Use correct orientation based on flex direction
     let padding_spacing_orientation = match direction {
-        crate::layout::FlexDirection::Row => Orientation::Horizontal,
-        crate::layout::FlexDirection::Column => Orientation::Vertical,
+        crate::layout::FlexDirection::Row | crate::layout::FlexDirection::RowReverse => {
+            Orientation::Horizontal
+        }
+        crate::layout::FlexDirection::Column | crate::layout::FlexDirection::ColumnReverse => {
+            Orientation::Vertical
+        }
     };
 
     let (padding, spacing) =
@@ -985,13 +989,13 @@ fn compute_flexbox_layout_info(
     let compile_time_direction = layout.direction.as_ref().and_then(|nr| {
         nr.element().borrow().bindings.get(nr.name()).and_then(|binding| {
             match &binding.borrow().expression {
-                crate::expression_tree::Expression::EnumerationValue(ev) => {
-                    if ev.value == 0 {
-                        Some(crate::layout::FlexDirection::Row)
-                    } else {
-                        Some(crate::layout::FlexDirection::Column)
-                    }
-                }
+                crate::expression_tree::Expression::EnumerationValue(ev) => match ev.value {
+                    0 => Some(crate::layout::FlexDirection::Row),
+                    1 => Some(crate::layout::FlexDirection::RowReverse),
+                    2 => Some(crate::layout::FlexDirection::Column),
+                    3 => Some(crate::layout::FlexDirection::ColumnReverse),
+                    _ => None,
+                },
                 _ => None,
             }
         })
@@ -1057,11 +1061,16 @@ fn compute_flexbox_layout_info_for_direction(
     ctx: &mut ExpressionLoweringCtx,
 ) -> llr_Expression {
     // Determine if this is main-axis or cross-axis based on direction
-    let is_cross_axis = match (direction, orientation) {
-        (crate::layout::FlexDirection::Row, Orientation::Vertical) => true,
-        (crate::layout::FlexDirection::Column, Orientation::Horizontal) => true,
-        _ => false,
-    };
+    let is_cross_axis = matches!(
+        (direction, orientation),
+        (
+            crate::layout::FlexDirection::Row | crate::layout::FlexDirection::RowReverse,
+            Orientation::Vertical,
+        ) | (
+            crate::layout::FlexDirection::Column | crate::layout::FlexDirection::ColumnReverse,
+            Orientation::Horizontal,
+        )
+    );
 
     if is_cross_axis {
         // Cross-axis: need constraint to handle wrapping

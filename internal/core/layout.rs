@@ -1435,12 +1435,14 @@ pub fn solve_flexbox_layout(
 
     let taffy_direction = match data.direction {
         FlexDirection::Row => flexbox_taffy::TaffyFlexDirection::Row,
+        FlexDirection::RowReverse => flexbox_taffy::TaffyFlexDirection::RowReverse,
         FlexDirection::Column => flexbox_taffy::TaffyFlexDirection::Column,
+        FlexDirection::ColumnReverse => flexbox_taffy::TaffyFlexDirection::ColumnReverse,
     };
 
     let (container_width, container_height) = match data.direction {
-        FlexDirection::Row => (Some(data.width), None),
-        FlexDirection::Column => (None, Some(data.height)),
+        FlexDirection::Row | FlexDirection::RowReverse => (Some(data.width), None),
+        FlexDirection::Column | FlexDirection::ColumnReverse => (None, Some(data.height)),
     };
 
     let mut builder = flexbox_taffy::FlexboxTaffyBuilder::new(
@@ -1455,8 +1457,8 @@ pub fn solve_flexbox_layout(
     );
 
     let (available_width, available_height) = match data.direction {
-        FlexDirection::Row => (data.width, Coord::MAX),
-        FlexDirection::Column => (Coord::MAX, data.height),
+        FlexDirection::Row | FlexDirection::RowReverse => (data.width, Coord::MAX),
+        FlexDirection::Column | FlexDirection::ColumnReverse => (Coord::MAX, data.height),
     };
 
     builder.compute_layout(available_width, available_height);
@@ -1492,8 +1494,8 @@ pub fn flexbox_layout_info(
 
     // Determine if this orientation is the main axis or cross axis
     let is_main_axis = match (direction, orientation) {
-        (FlexDirection::Row, Orientation::Horizontal) => true,
-        (FlexDirection::Column, Orientation::Vertical) => true,
+        (FlexDirection::Row | FlexDirection::RowReverse, Orientation::Horizontal) => true,
+        (FlexDirection::Column | FlexDirection::ColumnReverse, Orientation::Vertical) => true,
         _ => false,
     };
 
@@ -1548,8 +1550,8 @@ pub fn flexbox_layout_info_with_constraint(
 ) -> LayoutInfo {
     // Determine if we're asking for main-axis or cross-axis
     let is_main_axis = match (direction, orientation) {
-        (FlexDirection::Row, Orientation::Horizontal) => true,
-        (FlexDirection::Column, Orientation::Vertical) => true,
+        (FlexDirection::Row | FlexDirection::RowReverse, Orientation::Horizontal) => true,
+        (FlexDirection::Column | FlexDirection::ColumnReverse, Orientation::Vertical) => true,
         _ => false,
     };
 
@@ -1587,8 +1589,8 @@ pub fn flexbox_layout_info_with_constraint(
         // - Row asking Vertical: constraint_size is width (from Vertical's perpendicular)
         // - Column asking Horizontal: constraint_size is height (from Horizontal's perpendicular)
         let cell_count = match direction {
-            FlexDirection::Row => cells_h.len(),
-            FlexDirection::Column => cells_v.len(),
+            FlexDirection::Row | FlexDirection::RowReverse => cells_h.len(),
+            FlexDirection::Column | FlexDirection::ColumnReverse => cells_v.len(),
         };
 
         if cell_count < 1 {
@@ -1598,12 +1600,14 @@ pub fn flexbox_layout_info_with_constraint(
 
         let taffy_direction = match direction {
             FlexDirection::Row => flexbox_taffy::TaffyFlexDirection::Row,
+            FlexDirection::RowReverse => flexbox_taffy::TaffyFlexDirection::RowReverse,
             FlexDirection::Column => flexbox_taffy::TaffyFlexDirection::Column,
+            FlexDirection::ColumnReverse => flexbox_taffy::TaffyFlexDirection::ColumnReverse,
         };
 
         let (container_width, container_height) = match direction {
-            FlexDirection::Row => (Some(constraint_size), None),
-            FlexDirection::Column => (None, Some(constraint_size)),
+            FlexDirection::Row | FlexDirection::RowReverse => (Some(constraint_size), None),
+            FlexDirection::Column | FlexDirection::ColumnReverse => (None, Some(constraint_size)),
         };
 
         let mut builder = flexbox_taffy::FlexboxTaffyBuilder::new(
@@ -1618,16 +1622,16 @@ pub fn flexbox_layout_info_with_constraint(
         );
 
         let (available_width, available_height) = match direction {
-            FlexDirection::Row => (constraint_size, Coord::MAX),
-            FlexDirection::Column => (Coord::MAX, constraint_size),
+            FlexDirection::Row | FlexDirection::RowReverse => (constraint_size, Coord::MAX),
+            FlexDirection::Column | FlexDirection::ColumnReverse => (Coord::MAX, constraint_size),
         };
 
         builder.compute_layout(available_width, available_height);
         let (total_width, total_height) = builder.container_size();
 
         let (perpendicular_size, computed_size) = match direction {
-            FlexDirection::Row => (cells_v, total_height),
-            FlexDirection::Column => (cells_h, total_width),
+            FlexDirection::Row | FlexDirection::RowReverse => (cells_v, total_height),
+            FlexDirection::Column | FlexDirection::ColumnReverse => (cells_h, total_width),
         };
 
         // Min perpendicular size is the minimum of any single item
