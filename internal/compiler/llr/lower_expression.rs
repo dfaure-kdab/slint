@@ -1091,6 +1091,7 @@ fn compute_flexbox_layout_info(
                 value: orientation as usize,
                 enumeration: crate::typeregister::BUILTIN.with(|e| e.enums.Orientation.clone()),
             }),
+            fld.direction.clone(),
         ];
         match fld.compute_cells {
             Some((cells_h_var, cells_v_var, elements)) => {

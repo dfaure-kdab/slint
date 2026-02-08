@@ -11,7 +11,7 @@ use i_slint_compiler::layout::{
 };
 use i_slint_compiler::namedreference::NamedReference;
 use i_slint_compiler::object_tree::ElementRc;
-use i_slint_core::items::{DialogButtonRole, ItemRc};
+use i_slint_core::items::{DialogButtonRole, FlexDirection as CoreFlexDirection, ItemRc};
 use i_slint_core::layout::{self as core_layout, GridLayoutOrganizedData};
 use i_slint_core::model::RepeatedItemTree;
 use i_slint_core::slice::Slice;
@@ -306,11 +306,18 @@ pub(crate) fn compute_flexbox_layout_info(
             padding_and_spacing(&flexbox_layout.geometry, orientation, &expr_eval);
         let cells = if orientation == Orientation::Horizontal { &cells_h } else { &cells_v };
 
+        // Convert compiler FlexDirection to runtime FlexDirection
+        let runtime_direction = match direction {
+            FlexDirection::Row => CoreFlexDirection::Row,
+            FlexDirection::Column => CoreFlexDirection::Column,
+        };
+
         core_layout::flexbox_layout_info(
             i_slint_core::slice::Slice::from(cells.as_slice()),
             spacing,
             &padding,
             to_runtime(orientation),
+            runtime_direction,
         )
         .into()
     }

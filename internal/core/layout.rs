@@ -1477,6 +1477,7 @@ pub fn flexbox_layout_info(
     spacing: Coord,
     padding: &Padding,
     orientation: Orientation,
+    direction: FlexDirection,
 ) -> LayoutInfo {
     let count = cells.len();
     if count < 1 {
@@ -1489,40 +1490,43 @@ pub fn flexbox_layout_info(
 
     let extra_pad = padding.begin + padding.end;
 
-    match orientation {
-        Orientation::Horizontal => {
-            // For horizontal: min width is the widest single item, preferred is all items in one row
-            let min = cells.iter().map(|c| c.constraint.min).fold(0.0 as Coord, |a, b| a.max(b))
-                + extra_pad;
-            let preferred = cells.iter().map(|c| c.constraint.preferred_bounded()).sum::<Coord>()
-                + spacing * (count - 1) as Coord
-                + extra_pad;
-            let stretch = cells.iter().map(|c| c.constraint.stretch).sum::<f32>();
-            LayoutInfo {
-                min,
-                max: Coord::MAX,
-                min_percent: 0.0,
-                max_percent: 100.0,
-                preferred,
-                stretch,
-            }
+    // Determine if this orientation is the main axis or cross axis
+    let is_main_axis = match (direction, orientation) {
+        (FlexDirection::Row, Orientation::Horizontal) => true,
+        (FlexDirection::Column, Orientation::Vertical) => true,
+        _ => false,
+    };
+
+    if is_main_axis {
+        // Main axis: items are laid out sequentially, so sum their sizes
+        let min =
+            cells.iter().map(|c| c.constraint.min).fold(0.0 as Coord, |a, b| a.max(b)) + extra_pad;
+        let preferred = cells.iter().map(|c| c.constraint.preferred_bounded()).sum::<Coord>()
+            + spacing * (count - 1) as Coord
+            + extra_pad;
+        let stretch = cells.iter().map(|c| c.constraint.stretch).sum::<f32>();
+        LayoutInfo {
+            min,
+            max: Coord::MAX,
+            min_percent: 0.0,
+            max_percent: 100.0,
+            preferred,
+            stretch,
         }
-        Orientation::Vertical => {
-            // For vertical: depends on container width (which we don't know here)
-            // Return constraints assuming single row as minimum
-            let min = cells.iter().map(|c| c.constraint.min).fold(0.0 as Coord, |a, b| a.max(b))
+    } else {
+        // Cross axis: items are stacked perpendicular, so use max of their sizes
+        let min =
+            cells.iter().map(|c| c.constraint.min).fold(0.0 as Coord, |a, b| a.max(b)) + extra_pad;
+        let preferred =
+            cells.iter().map(|c| c.constraint.preferred).fold(0.0 as Coord, |a, b| a.max(b))
                 + extra_pad;
-            let preferred =
-                cells.iter().map(|c| c.constraint.preferred).fold(0.0 as Coord, |a, b| a.max(b))
-                    + extra_pad;
-            LayoutInfo {
-                min,
-                max: Coord::MAX,
-                min_percent: 0.0,
-                max_percent: 100.0,
-                preferred,
-                stretch: 1.0,
-            }
+        LayoutInfo {
+            min,
+            max: Coord::MAX,
+            min_percent: 0.0,
+            max_percent: 100.0,
+            preferred,
+            stretch: 1.0,
         }
     }
 }
@@ -1726,8 +1730,9 @@ pub(crate) mod ffi {
         spacing: Coord,
         padding: &Padding,
         orientation: Orientation,
+        direction: FlexDirection,
     ) -> LayoutInfo {
-        super::flexbox_layout_info(cells, spacing, padding, orientation)
+        super::flexbox_layout_info(cells, spacing, padding, orientation, direction)
     }
 
     #[unsafe(no_mangle)]
