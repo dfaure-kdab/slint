@@ -203,20 +203,19 @@ pub(crate) fn solve_flexbox_layout(
             eval::load_property(component, &nr.element(), nr.name()).unwrap().try_into().unwrap()
         });
 
-    let padding_spacing_orientation = match direction {
-        i_slint_core::items::FlexDirection::Row => Orientation::Horizontal,
-        i_slint_core::items::FlexDirection::Column => Orientation::Vertical,
-        _ => Orientation::Horizontal, // Default to horizontal for unknown variants
-    };
-    let (padding, spacing) =
-        padding_and_spacing(&flexbox_layout.geometry, padding_spacing_orientation, &expr_eval);
+    let (padding_h, spacing_h) =
+        padding_and_spacing(&flexbox_layout.geometry, Orientation::Horizontal, &expr_eval);
+    let (padding_v, spacing_v) =
+        padding_and_spacing(&flexbox_layout.geometry, Orientation::Vertical, &expr_eval);
 
     core_layout::solve_flexbox_layout(
         &core_layout::FlexBoxLayoutData {
             width: width_ref.as_ref().map(&expr_eval).unwrap_or(0.),
             height: height_ref.as_ref().map(&expr_eval).unwrap_or(0.),
-            spacing,
-            padding,
+            spacing_h,
+            spacing_v,
+            padding_h,
+            padding_v,
             alignment,
             direction,
             cells_h: i_slint_core::slice::Slice::from(cells_h.as_slice()),
@@ -267,6 +266,11 @@ pub(crate) fn compute_flexbox_layout_info(
 
     let (padding, spacing) = padding_and_spacing(&flexbox_layout.geometry, orientation, &expr_eval);
 
+    let (padding_h, spacing_h) =
+        padding_and_spacing(&flexbox_layout.geometry, Orientation::Horizontal, &expr_eval);
+    let (padding_v, spacing_v) =
+        padding_and_spacing(&flexbox_layout.geometry, Orientation::Vertical, &expr_eval);
+
     // Convert compiler FlexDirection to runtime FlexDirection
     let runtime_direction = match direction {
         FlexDirection::Row => CoreFlexDirection::Row,
@@ -307,8 +311,10 @@ pub(crate) fn compute_flexbox_layout_info(
         core_layout::flexbox_layout_info_with_constraint(
             i_slint_core::slice::Slice::from(cells_h.as_slice()),
             i_slint_core::slice::Slice::from(cells_v.as_slice()),
-            spacing,
-            &padding,
+            spacing_h,
+            spacing_v,
+            &padding_h,
+            &padding_v,
             to_runtime(orientation),
             runtime_direction,
             constraint_size,

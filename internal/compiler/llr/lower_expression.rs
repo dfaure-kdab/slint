@@ -894,38 +894,10 @@ fn solve_flexbox_layout(
     layout: &crate::layout::FlexBoxLayout,
     ctx: &mut ExpressionLoweringCtx,
 ) -> llr_Expression {
-    // Try to determine direction at compile time to use the correct padding/spacing orientation
-    let direction = layout
-        .direction
-        .as_ref()
-        .and_then(|nr| {
-            nr.element().borrow().bindings.get(nr.name()).and_then(|binding| {
-                match &binding.borrow().expression {
-                    crate::expression_tree::Expression::EnumerationValue(ev) => {
-                        if ev.value == 0 {
-                            Some(crate::layout::FlexDirection::Row)
-                        } else {
-                            Some(crate::layout::FlexDirection::Column)
-                        }
-                    }
-                    _ => None,
-                }
-            })
-        })
-        .unwrap_or(crate::layout::FlexDirection::Row); // Default to Row
-
-    // Use correct orientation based on flex direction
-    let padding_spacing_orientation = match direction {
-        crate::layout::FlexDirection::Row | crate::layout::FlexDirection::RowReverse => {
-            Orientation::Horizontal
-        }
-        crate::layout::FlexDirection::Column | crate::layout::FlexDirection::ColumnReverse => {
-            Orientation::Vertical
-        }
-    };
-
-    let (padding, spacing) =
-        generate_layout_padding_and_spacing(&layout.geometry, padding_spacing_orientation, ctx);
+    let (padding_h, spacing_h) =
+        generate_layout_padding_and_spacing(&layout.geometry, Orientation::Horizontal, ctx);
+    let (padding_v, spacing_v) =
+        generate_layout_padding_and_spacing(&layout.geometry, Orientation::Vertical, ctx);
     let fld = flexbox_layout_data(layout, ctx);
     let width = layout_geometry_size(&layout.geometry.rect, Orientation::Horizontal, ctx);
     let height = layout_geometry_size(&layout.geometry.rect, Orientation::Vertical, ctx);
@@ -934,8 +906,10 @@ fn solve_flexbox_layout(
         [
             ("width", Type::Float32, width),
             ("height", Type::Float32, height),
-            ("spacing", Type::Float32, spacing),
-            ("padding", padding.ty(ctx), padding),
+            ("spacing_h", Type::Float32, spacing_h),
+            ("spacing_v", Type::Float32, spacing_v),
+            ("padding_h", padding_h.ty(ctx), padding_h),
+            ("padding_v", padding_v.ty(ctx), padding_v),
             (
                 "alignment",
                 crate::typeregister::BUILTIN
@@ -1074,8 +1048,10 @@ fn compute_flexbox_layout_info_for_direction(
 
     if is_cross_axis {
         // Cross-axis: need constraint to handle wrapping
-        let (padding, spacing) =
-            generate_layout_padding_and_spacing(&layout.geometry, orientation, ctx);
+        let (padding_h, spacing_h) =
+            generate_layout_padding_and_spacing(&layout.geometry, Orientation::Horizontal, ctx);
+        let (padding_v, spacing_v) =
+            generate_layout_padding_and_spacing(&layout.geometry, Orientation::Vertical, ctx);
 
         // For cross-axis, pass the perpendicular dimension as constraint
         let constraint_size = match orientation {
@@ -1095,8 +1071,10 @@ fn compute_flexbox_layout_info_for_direction(
         let arguments = vec![
             fld.cells_h,
             fld.cells_v,
-            spacing,
-            padding,
+            spacing_h,
+            spacing_v,
+            padding_h,
+            padding_v,
             orientation_expr,
             fld.direction,
             constraint_size,

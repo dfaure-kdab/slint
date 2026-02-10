@@ -1016,8 +1016,10 @@ pub struct BoxLayoutData<'a> {
 pub struct FlexBoxLayoutData<'a> {
     pub width: Coord,
     pub height: Coord,
-    pub spacing: Coord,
-    pub padding: Padding,
+    pub spacing_h: Coord,
+    pub spacing_v: Coord,
+    pub padding_h: Padding,
+    pub padding_v: Padding,
     pub alignment: LayoutAlignment,
     pub direction: FlexDirection,
     /// Horizontal constraints (width) for each cell
@@ -1184,8 +1186,10 @@ mod flexbox_taffy {
         pub fn new(
             cells_h: &Slice<LayoutItemInfo>,
             cells_v: &Slice<LayoutItemInfo>,
-            spacing: Coord,
-            padding: &Padding,
+            spacing_h: Coord,
+            spacing_v: Coord,
+            padding_h: &Padding,
+            padding_v: &Padding,
             alignment: LayoutAlignment,
             flex_direction: TaffyFlexDirection,
             container_width: Option<Coord>,
@@ -1289,16 +1293,14 @@ mod flexbox_taffy {
                         }),
                         align_content: Some(AlignContent::FlexStart),
                         gap: Size {
-                            width: LengthPercentage::Length(spacing),
-                            height: LengthPercentage::Length(spacing),
+                            width: LengthPercentage::Length(spacing_h),
+                            height: LengthPercentage::Length(spacing_v),
                         },
-                        // For FlexBoxLayout, padding is uniform on all 4 sides
-                        // The Padding struct has begin/end which should be equal for uniform padding
                         padding: Rect {
-                            left: LengthPercentage::Length(padding.begin),
-                            right: LengthPercentage::Length(padding.end),
-                            top: LengthPercentage::Length(padding.begin),
-                            bottom: LengthPercentage::Length(padding.end),
+                            left: LengthPercentage::Length(padding_h.begin),
+                            right: LengthPercentage::Length(padding_h.end),
+                            top: LengthPercentage::Length(padding_v.begin),
+                            bottom: LengthPercentage::Length(padding_v.end),
                         },
                         size: Size {
                             width: container_width
@@ -1448,8 +1450,10 @@ pub fn solve_flexbox_layout(
     let mut builder = flexbox_taffy::FlexboxTaffyBuilder::new(
         &data.cells_h,
         &data.cells_v,
-        data.spacing,
-        &data.padding,
+        data.spacing_h,
+        data.spacing_v,
+        &data.padding_h,
+        &data.padding_v,
         data.alignment,
         taffy_direction,
         container_width,
@@ -1542,8 +1546,10 @@ pub fn flexbox_layout_info(
 pub fn flexbox_layout_info_with_constraint(
     cells_h: Slice<LayoutItemInfo>,
     cells_v: Slice<LayoutItemInfo>,
-    spacing: Coord,
-    padding: &Padding,
+    spacing_h: Coord,
+    spacing_v: Coord,
+    padding_h: &Padding,
+    padding_v: &Padding,
     orientation: Orientation,
     direction: FlexDirection,
     constraint_size: Coord,
@@ -1557,10 +1563,18 @@ pub fn flexbox_layout_info_with_constraint(
 
     if is_main_axis {
         // Main axis: simple calculation (items flow sequentially)
-        // NOTE: We don't use constraint_size here - no circular dependency
+        // NOTE: We don't use constraint_size here
         let cells = match orientation {
             Orientation::Horizontal => &cells_h,
             Orientation::Vertical => &cells_v,
+        };
+        let padding = match orientation {
+            Orientation::Horizontal => padding_h,
+            Orientation::Vertical => padding_v,
+        };
+        let spacing = match orientation {
+            Orientation::Horizontal => spacing_h,
+            Orientation::Vertical => spacing_v,
         };
         let count = cells.len();
         if count < 1 {
@@ -1586,11 +1600,16 @@ pub fn flexbox_layout_info_with_constraint(
     } else {
         // Cross-axis: constraint-based calculation (wrapping affects this dimension)
         // constraint_size is the main-axis dimension that determines wrapping:
-        // - Row asking Vertical: constraint_size is width (from Vertical's perpendicular)
-        // - Column asking Horizontal: constraint_size is height (from Horizontal's perpendicular)
+        // - Row asking Vertical: constraint_size is width
+        // - Column asking Horizontal: constraint_size is height
         let cell_count = match direction {
             FlexDirection::Row | FlexDirection::RowReverse => cells_h.len(),
             FlexDirection::Column | FlexDirection::ColumnReverse => cells_v.len(),
+        };
+
+        let padding = match direction {
+            FlexDirection::Row | FlexDirection::RowReverse => padding_h,
+            FlexDirection::Column | FlexDirection::ColumnReverse => padding_v,
         };
 
         if cell_count < 1 {
@@ -1613,8 +1632,10 @@ pub fn flexbox_layout_info_with_constraint(
         let mut builder = flexbox_taffy::FlexboxTaffyBuilder::new(
             &cells_h,
             &cells_v,
-            spacing,
-            padding,
+            spacing_h,
+            spacing_v,
+            padding_h,
+            padding_v,
             LayoutAlignment::Start,
             taffy_direction,
             container_width,
@@ -1770,8 +1791,10 @@ pub(crate) mod ffi {
     pub extern "C" fn slint_flexbox_layout_info_with_constraint(
         cells_h: Slice<LayoutItemInfo>,
         cells_v: Slice<LayoutItemInfo>,
-        spacing: Coord,
-        padding: &Padding,
+        spacing_h: Coord,
+        spacing_v: Coord,
+        padding_h: &Padding,
+        padding_v: &Padding,
         orientation: Orientation,
         direction: FlexDirection,
         constraint_size: Coord,
@@ -1779,8 +1802,10 @@ pub(crate) mod ffi {
         super::flexbox_layout_info_with_constraint(
             cells_h,
             cells_v,
-            spacing,
-            padding,
+            spacing_h,
+            spacing_v,
+            padding_h,
+            padding_v,
             orientation,
             direction,
             constraint_size,
