@@ -11,6 +11,7 @@ use i_slint_compiler::layout::{
 };
 use i_slint_compiler::namedreference::NamedReference;
 use i_slint_compiler::object_tree::ElementRc;
+use i_slint_core::Coord;
 use i_slint_core::items::{DialogButtonRole, FlexDirection, ItemRc};
 use i_slint_core::layout::{self as core_layout, GridLayoutOrganizedData};
 use i_slint_core::model::RepeatedItemTree;
@@ -213,10 +214,10 @@ pub(crate) fn solve_flexbox_layout(
             padding_v,
             alignment,
             direction,
-            cells_h: i_slint_core::slice::Slice::from(cells_h.as_slice()),
-            cells_v: i_slint_core::slice::Slice::from(cells_v.as_slice()),
+            cells_h: Slice::from(cells_h.as_slice()),
+            cells_v: Slice::from(cells_v.as_slice()),
         },
-        i_slint_core::slice::Slice::from(repeated_indices.as_slice()),
+        Slice::from(repeated_indices.as_slice()),
     )
     .into()
 }
@@ -279,14 +280,15 @@ pub(crate) fn compute_flexbox_layout_info(
         // Main axis: use simple layout info (no constraint needed)
         // This avoids reading the perpendicular dimension and prevents circular dependencies
         core_layout::flexbox_layout_info(
-            i_slint_core::slice::Slice::from(cells_h.as_slice()),
-            i_slint_core::slice::Slice::from(cells_v.as_slice()),
+            Slice::from(cells_h.as_slice()),
+            Slice::from(cells_v.as_slice()),
             spacing_h,
             spacing_v,
             &padding_h,
             &padding_v,
             to_runtime(orientation),
             direction,
+            Coord::MAX,
         )
         .into()
     } else {
@@ -305,9 +307,9 @@ pub(crate) fn compute_flexbox_layout_info(
             }
         };
 
-        core_layout::flexbox_layout_info_with_constraint(
-            i_slint_core::slice::Slice::from(cells_h.as_slice()),
-            i_slint_core::slice::Slice::from(cells_v.as_slice()),
+        core_layout::flexbox_layout_info(
+            Slice::from(cells_h.as_slice()),
+            Slice::from(cells_v.as_slice()),
             spacing_h,
             spacing_v,
             &padding_h,

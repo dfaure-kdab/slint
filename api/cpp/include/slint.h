@@ -217,7 +217,7 @@ flexbox_layout_info(cbindgen_private::Slice<cbindgen_private::LayoutItemInfo> ce
 }
 
 inline cbindgen_private::LayoutInfo
-flexbox_layout_info_with_constraint(cbindgen_private::Slice<cbindgen_private::LayoutItemInfo> cells_h,
+flexbox_layout_info(cbindgen_private::Slice<cbindgen_private::LayoutItemInfo> cells_h,
                                    cbindgen_private::Slice<cbindgen_private::LayoutItemInfo> cells_v,
                                    float spacing_h, float spacing_v,
                                    const cbindgen_private::Padding &padding_h,
