@@ -11,7 +11,7 @@ use i_slint_compiler::layout::{
 };
 use i_slint_compiler::namedreference::NamedReference;
 use i_slint_compiler::object_tree::ElementRc;
-use i_slint_core::items::{DialogButtonRole, FlexDirection as CoreFlexDirection, ItemRc};
+use i_slint_core::items::{DialogButtonRole, FlexDirection, ItemRc};
 use i_slint_core::layout::{self as core_layout, GridLayoutOrganizedData};
 use i_slint_core::model::RepeatedItemTree;
 use i_slint_core::slice::Slice;
@@ -196,12 +196,7 @@ pub(crate) fn solve_flexbox_layout(
         .map_or(i_slint_core::items::LayoutAlignment::default(), |nr| {
             eval::load_property(component, &nr.element(), nr.name()).unwrap().try_into().unwrap()
         });
-    let direction = flexbox_layout
-        .direction
-        .as_ref()
-        .map_or(i_slint_core::items::FlexDirection::default(), |nr| {
-            eval::load_property(component, &nr.element(), nr.name()).unwrap().try_into().unwrap()
-        });
+    let direction = flexbox_layout_direction(flexbox_layout, local_context);
 
     let (padding_h, spacing_h) =
         padding_and_spacing(&flexbox_layout.geometry, Orientation::Horizontal, &expr_eval);
@@ -226,12 +221,37 @@ pub(crate) fn solve_flexbox_layout(
     .into()
 }
 
+fn flexbox_layout_direction(
+    flexbox_layout: &i_slint_compiler::layout::FlexBoxLayout,
+    local_context: &EvalLocalContext,
+) -> FlexDirection {
+    flexbox_layout
+        .direction
+        .as_ref()
+        .and_then(|nr| {
+            let value =
+                eval::load_property(local_context.component_instance, &nr.element(), nr.name())
+                    .ok()?;
+            if let Value::EnumerationValue(_, variant) = &value {
+                match variant.as_str() {
+                    "row" => Some(FlexDirection::Row),
+                    "row-reverse" => Some(FlexDirection::RowReverse),
+                    "column" => Some(FlexDirection::Column),
+                    "column-reverse" => Some(FlexDirection::ColumnReverse),
+                    _ => None,
+                }
+            } else {
+                None
+            }
+        })
+        .unwrap_or(FlexDirection::Row)
+}
+
 pub(crate) fn compute_flexbox_layout_info(
     flexbox_layout: &i_slint_compiler::layout::FlexBoxLayout,
     orientation: Orientation,
     local_context: &mut EvalLocalContext,
 ) -> Value {
-    use i_slint_compiler::layout::FlexDirection;
     let component = local_context.component_instance;
     let expr_eval = |nr: &NamedReference| -> f32 {
         eval::load_property(component, &nr.element(), nr.name()).unwrap().try_into().unwrap()
@@ -241,21 +261,7 @@ pub(crate) fn compute_flexbox_layout_info(
         flexbox_layout_data(flexbox_layout, component, &expr_eval, local_context);
 
     // Get the direction from the property binding
-    let direction = flexbox_layout
-        .direction
-        .as_ref()
-        .and_then(|nr| {
-            let value = eval::load_property(component, &nr.element(), nr.name()).ok()?;
-            let direction_int: i32 = value.try_into().ok()?;
-            match direction_int {
-                0 => Some(FlexDirection::Row),
-                1 => Some(FlexDirection::RowReverse),
-                2 => Some(FlexDirection::Column),
-                3 => Some(FlexDirection::ColumnReverse),
-                _ => None,
-            }
-        })
-        .unwrap_or(FlexDirection::Row);
+    let direction = flexbox_layout_direction(flexbox_layout, local_context);
 
     // Determine if we're on the main axis or cross axis
     let is_main_axis = matches!(
@@ -271,14 +277,6 @@ pub(crate) fn compute_flexbox_layout_info(
     let (padding_v, spacing_v) =
         padding_and_spacing(&flexbox_layout.geometry, Orientation::Vertical, &expr_eval);
 
-    // Convert compiler FlexDirection to runtime FlexDirection
-    let runtime_direction = match direction {
-        FlexDirection::Row => CoreFlexDirection::Row,
-        FlexDirection::RowReverse => CoreFlexDirection::RowReverse,
-        FlexDirection::Column => CoreFlexDirection::Column,
-        FlexDirection::ColumnReverse => CoreFlexDirection::ColumnReverse,
-    };
-
     if is_main_axis {
         // Main axis: use simple layout info (no constraint needed)
         // This avoids reading the perpendicular dimension and prevents circular dependencies
@@ -289,7 +287,7 @@ pub(crate) fn compute_flexbox_layout_info(
             spacing,
             &padding,
             to_runtime(orientation),
-            runtime_direction,
+            direction,
         )
         .into()
     } else {
@@ -316,7 +314,7 @@ pub(crate) fn compute_flexbox_layout_info(
             &padding_h,
             &padding_v,
             to_runtime(orientation),
-            runtime_direction,
+            direction,
             constraint_size,
         )
         .into()
