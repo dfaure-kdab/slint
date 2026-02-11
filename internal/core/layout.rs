@@ -1344,8 +1344,8 @@ mod flexbox_taffy {
             (layout.size.width, layout.size.height)
         }
 
-        /// Get the layout for a specific child
-        pub fn child_layout(&self, idx: usize) -> (Coord, Coord, Coord, Coord) {
+        /// Get the geometry for a specific child
+        pub fn child_geometry(&self, idx: usize) -> (Coord, Coord, Coord, Coord) {
             let layout = self.taffy.layout(self.children[idx]).unwrap();
             (layout.location.x, layout.location.y, layout.size.width, layout.size.height)
         }
@@ -1397,7 +1397,7 @@ pub fn solve_flexbox_layout(
     // Extract results
     let result_slice = result.make_mut_slice();
     for idx in 0..data.cells_h.len() {
-        let (x, y, w, h) = builder.child_layout(idx);
+        let (x, y, w, h) = builder.child_geometry(idx);
         let base = idx * 4;
         result_slice[base] = x;
         result_slice[base + 1] = y;
