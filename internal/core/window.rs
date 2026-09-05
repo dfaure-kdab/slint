@@ -585,6 +585,34 @@ pub(crate) struct MouseDispatchResult {
     pub accepted: bool,
 }
 
+/// The name of the running program, used as the window title when the application doesn't set one.
+///
+/// It comes from argument zero, the same place the windowing system takes the application id from,
+/// so the two agree even when the program is started through a symlink.
+/// Empty when the platform names the program neither way.
+pub fn application_name() -> SharedString {
+    #[cfg(feature = "std")]
+    {
+        fn from_path(path: std::path::PathBuf) -> Option<SharedString> {
+            let name = path.file_name()?.to_string_lossy();
+            // A Windows program is called "foo", not "foo.exe"
+            let name = name.strip_suffix(".exe").unwrap_or(&name);
+            (!name.is_empty()).then(|| name.into())
+        }
+        std::thread_local! {
+            static NAME: SharedString = std::env::args_os()
+                .next()
+                .map(std::path::PathBuf::from)
+                .and_then(from_path)
+                .or_else(|| std::env::current_exe().ok().and_then(from_path))
+                .unwrap_or_default();
+        }
+        NAME.with(SharedString::clone)
+    }
+    #[cfg(not(feature = "std"))]
+    SharedString::default()
+}
+
 /// Inner datastructure for the [`crate::api::Window`]
 pub struct WindowInner {
     window_adapter_weak: Weak<dyn WindowAdapter>,
@@ -708,6 +736,7 @@ impl WindowInner {
             .map(|internal| internal.safe_area_inset())
             .unwrap_or_default();
         self.set_window_item_safe_area(inset.to_logical(scale_factor));
+        self.set_window_item_default_title(application_name());
         window_adapter.request_redraw();
         let weak = Rc::downgrade(&window_adapter);
         self.context().single_shot(Default::default(), move || {
@@ -2290,6 +2319,17 @@ impl WindowInner {
         }
     }
 
+    /// Override the title the window shows when the application doesn't set `title`.
+    ///
+    /// Call it once the component exists, and again after anything that runs
+    /// [`Self::set_component`], which puts the application name back.
+    /// A window whose title the application decides ignores this.
+    pub fn set_window_item_default_title(&self, title: SharedString) {
+        if let Some(window_item) = self.window_item() {
+            window_item.as_pin_ref().default_title.set(title);
+        }
+    }
+
     pub(crate) fn set_window_item_virtual_keyboard(
         &self,
         origin: crate::lengths::LogicalPoint,
@@ -3214,5 +3254,17 @@ pub mod ffi_window {
         } else {
             null_mut()
         }
+    }
+}
+
+#[cfg(all(test, feature = "std"))]
+mod tests {
+    #[test]
+    fn application_name_is_a_bare_program_name() {
+        // The test binary is the running program here
+        let name = super::application_name();
+        assert!(!name.is_empty());
+        assert!(!name.contains(std::path::MAIN_SEPARATOR), "{name}");
+        assert!(!name.ends_with(".exe"), "{name}");
     }
 }

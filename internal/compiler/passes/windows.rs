@@ -6,7 +6,7 @@
 
 use crate::diagnostics::BuildDiagnostics;
 use crate::expression_tree::{BindingExpression, Expression};
-use crate::langtype::{ElementType, Type};
+use crate::langtype::{ElementType, PropertyLookupMode, Type};
 use crate::namedreference::NamedReference;
 use crate::object_tree::{Component, Element};
 use crate::typeregister::TypeRegister;
@@ -149,6 +149,42 @@ pub fn ensure_window(
             .into(),
             to: Type::Brush,
         }
+    });
+
+    // The root only became a window here, so it missed the earlier pass
+    bind_default_title(component);
+}
+
+/// Bind the window title to `default-title` unless the source decides the title itself.
+///
+/// The runtime fills `default-title` with the application name, so a window the source leaves
+/// untitled still says what program it belongs to.
+/// Resolving that in the compiler rather than falling back in the backends keeps an explicit
+/// `title: ""` empty.
+///
+/// Run this before `lower_states`, which bakes whatever `title` is bound to into the
+/// else-branch of the condition it builds.
+pub fn bind_default_title(component: &Rc<Component>) {
+    let root = &component.root_element;
+    // Where a `builtins.slint` default would land, and for the same reason: a binding on a
+    // component that derives from this one would shadow it.
+    if !matches!(root.borrow().base_type, ElementType::Builtin(_)) {
+        return;
+    }
+    // A SystemTrayIcon root is a builtin too, but it has a title of its own and no window
+    let has_default_title =
+        root.borrow().lookup_property("default-title", PropertyLookupMode::InternalName).is_valid();
+    // Returning here rather than relying on `set_binding_if_not_set` alone keeps the
+    // NamedReference below out of an element that has no use for it
+    if !has_default_title || root.borrow().is_binding_set("title", false) {
+        return;
+    }
+    // A NamedReference names the storage key, so this reaches the builtin property even in a
+    // component that declares a `default-title` of its own.
+    // It has to be created outside the `borrow_mut`.
+    let default_title = NamedReference::new(root, SmolStr::new_static("default-title"));
+    root.borrow_mut().set_binding_if_not_set(SmolStr::new_static("title"), || {
+        Expression::PropertyReference(default_title)
     });
 }
 

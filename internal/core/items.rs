@@ -1265,6 +1265,7 @@ pub struct WindowItem {
     pub virtual_keyboard_size: Property<crate::lengths::LogicalSize>,
     pub background: Property<Brush>,
     pub title: Property<SharedString>,
+    pub default_title: Property<SharedString>,
     pub no_frame: Property<bool>,
     pub resize_border_width: Property<LogicalLength>,
     pub always_on_top: Property<bool>,

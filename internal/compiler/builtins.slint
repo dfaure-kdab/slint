@@ -1619,7 +1619,11 @@ component WindowItem {
     /// \default 0
     in property <length> resize-border-width;
     /// The window title that is shown in the title bar.
-    in property <string> title: "Slint Window";
+    /// \default the value of `default-title`
+    in property <string> title;
+    /// The title the window shows when the application doesn't set `title`.
+    /// Slint derives it from the name of the running program, and leaves it empty when it can't name one.
+    @shadowable out property <string> default-title;
     /// Some devices, such as mobile phones, allow programs to overlap the system UI. A few examples for this are the notch on iPhones, the window buttons on macOS on windows that extend their content over the titlebar and the system bar on Android. This property exposes the amount of space at the edges of the window that can be drawn to but where no interactive elements should be placed. On most devices, this is 0 for all sides.
     out property <Edges> safe-area-insets;
     /// On mobile devices, virtual keyboards (aka software keyboards or onscreen keyboards) are displayed on top of the application. When such a keyboard is shown, this property denotes the position of the top left boundary of the rectangle covered by it in window coordinates.

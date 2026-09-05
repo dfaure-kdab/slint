@@ -136,6 +136,9 @@ pub async fn run_passes(
             &palette,
             diag,
         );
+        // Before lower_states, which bakes whatever the title is bound to now into the
+        // else-branch of the condition it builds
+        windows::bind_default_title(component);
         lower_states::lower_states(component, &symbol_counters, &mut forwarded_references, diag);
         lower_text_input_interface::lower_text_input_interface(component);
         compile_paths::compile_paths(component, &doc.local_registry, diag);
